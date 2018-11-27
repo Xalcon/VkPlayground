@@ -100,12 +100,12 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy $(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
+      <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -119,12 +119,12 @@
       <LanguageStandard>stdcpplatest</LanguageStandard>
     </ClCompile>
     <Link>
-      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy $(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
+      <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -142,12 +142,12 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy $(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
+      <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -165,12 +165,12 @@
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
       <OptimizeReferences>true</OptimizeReferences>
-      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
+      <AdditionalLibraryDirectories>$(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
       <AdditionalDependencies>SDL2.lib;%(AdditionalDependencies)</AdditionalDependencies>
       <SubSystem>Console</SubSystem>
     </Link>
     <PostBuildEvent>
-      <Command>xcopy $(SolutionDir)extern\libsdl\VisualC\$(platform)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
+      <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
