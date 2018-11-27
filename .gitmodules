@@ -2,3 +2,10 @@
 	path = extern/libsdl
 	url = https://github.com/spurious/SDL-mirror
 	ignore = dirty
+[submodule "spdlog"]
+	shallow = true
+[submodule "extern/spdlog"]
+	path = extern/spdlog
+	url = https://github.com/gabime/spdlog
+[submodule "libsdl"]
+	shallow = true
