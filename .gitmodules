@@ -1,0 +1,4 @@
+[submodule "extern/libsdl"]
+	path = extern/libsdl
+	url = https://github.com/spurious/SDL-mirror
+	ignore = dirty
