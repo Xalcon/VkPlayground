@@ -174,7 +174,14 @@
     </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClCompile Include="src\App.cpp" />
     <ClCompile Include="src\main.cpp" />
+    <ClCompile Include="src\gfx\VulkanRenderer.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="src\App.hpp" />
+    <ClInclude Include="src\gfx\IRenderer.hpp" />
+    <ClInclude Include="src\gfx\VulkanRenderer.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
