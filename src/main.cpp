@@ -1,12 +1,11 @@
-#include <iostream>
+#include <vulkan/vulkan.hpp>
 #define SDL_MAIN_HANDLED
 #include <SDL.h>
 #include <SDL_vulkan.h>
 #include <spdlog/spdlog.h>
-#include "spdlog/sinks/stdout_color_sinks.h"
-#include <vulkan/vulkan.hpp>
+#include <spdlog/sinks/stdout_color_sinks.h>
 
-VkInstance instance;
+vk::Instance instance;
 
 void initVulkan(SDL_Window* window)
 {
@@ -67,10 +66,18 @@ int main(int argc, const char* argv[])
 		log->error("could not create sdl2 window: {0}", SDL_GetError());
 		return EXIT_FAILURE;
 	}
-
 	log->info("SDL2 window created");
 
-	initVulkan(window);
+	try
+	{
+		initVulkan(window);
+	}
+	catch(const std::exception& e)
+	{
+		log->error("Error initializing vulkan: {0}", e.what());
+		return EXIT_FAILURE;
+	}
+
 
 	const auto screenSurface = SDL_GetWindowSurface(window);
 	SDL_FillRect(screenSurface, nullptr, SDL_MapRGB(screenSurface->format, 0xFF, 0xFF, 0xFF));
