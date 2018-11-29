@@ -1,8 +1,10 @@
 #include "VulkanRenderer.h"
 #include <cassert>
+#include <set>
 #include <vulkan/vulkan.hpp>
 #include <SDL_vulkan.h>
 #include <spdlog/spdlog.h>
+#include "../utils/Rating.hpp"
 
 std::vector<const char*> getExtensions(SDL_Window* window)
 {
@@ -55,6 +57,18 @@ VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
+	if (this->device)
+	{
+		this->device.destroy();
+		this->device = nullptr;
+	}
+
+	if (this->surface)
+	{
+		this->instance.destroySurfaceKHR(this->surface);
+		this->surface = nullptr;
+	}
+
 	this->DestroyDebugCallback();
 
 	if (this->instance)
@@ -101,7 +115,7 @@ void VulkanRenderer::CreateInstance(SDL_Window* window)
 	auto log = spdlog::get("logger");
 	log->info("Initializing vulkan instance");
 
-	vk::ApplicationInfo appInfo("VkPlayground", VK_MAKE_VERSION(0, 1, 0), "unnamed", VK_MAKE_VERSION(0, 1, 0), VK_API_VERSION_1_1);
+	vk::ApplicationInfo appInfo("VkPlayground", VK_MAKE_VERSION(0, 1, 0), "unnamed", VK_MAKE_VERSION(0, 1, 0), VK_VERSION_1_1);
 
 	auto extensions = getExtensions(window);
 	auto layers = getLayers();
@@ -109,14 +123,20 @@ void VulkanRenderer::CreateInstance(SDL_Window* window)
 	for (auto& extension : extensions)
 		log->info("Requesting extension {0}", extension);
 
-	this->instance = vk::createInstance(vk::InstanceCreateInfo(vk::InstanceCreateFlags(), &appInfo, layers.size(), layers.data(), extensions.size(), extensions.data()));
+	this->instance = vk::createInstance(vk::InstanceCreateInfo(vk::InstanceCreateFlags(), &appInfo, static_cast<uint32_t>(layers.size()), layers.data(), static_cast<uint32_t>(extensions.size()), extensions.data()));
 	assert(instance);
 
 	if (std::find(extensions.begin(), extensions.end(), VK_EXT_DEBUG_UTILS_EXTENSION_NAME) != extensions.end())
 		this->RegisterDebugCallback();
 }
 
-int32_t ratePhysicalDevice(vk::PhysicalDevice& physicalDevice)
+void VulkanRenderer::CreateSurface(SDL_Window * window)
+{
+	if (!SDL_Vulkan_CreateSurface(window, this->instance, reinterpret_cast<VkSurfaceKHR*>(&this->surface)))
+		throw std::exception(SDL_GetError());
+}
+
+float ratePhysicalDevice(vk::PhysicalDevice physicalDevice)
 {
 	vk::PhysicalDeviceProperties props = physicalDevice.getProperties();
 	if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
@@ -144,30 +164,72 @@ void VulkanRenderer::PickPhysicalDevice()
 	auto log = spdlog::get("logger");
 
 	int i = 0;
-	for (auto& device : this->instance.enumeratePhysicalDevices())
+	auto deviceList = this->instance.enumeratePhysicalDevices();
+	for (auto& device : deviceList)
 	{
-		ratings.emplace_back(Rating { device, ratePhysicalDevice(device) });
 		auto props = device.getProperties();
 		log->info("[{0}] Name: {1}, Driver: {2}, Api: {3}", i++, props.deviceName, props.driverVersion, props.apiVersion);
 	}
 
-	Rating r = *std::max_element(ratings.begin(), ratings.end(), [](Rating a, Rating b) { return a.score > b.score; });
+	auto r = GetBestRatedElement<vk::PhysicalDevice>(deviceList, ratePhysicalDevice);
 	if (r.score <= 0)
 		throw std::exception("No suitable physical device found");
 
-	this->physicalDevice = r.device;
+	this->physicalDevice = r.element;
 }
 
 void VulkanRenderer::CreateDevice()
 {
-	vk::DeviceQueueCreateInfo queueCreateInfo;
-	vk::DeviceCreateInfo createInfo(vk::DeviceCreateFlags(), 1, &queueCreateInfo, 0, nullptr, 0, nullptr, nullptr);
+	auto families = this->physicalDevice.getQueueFamilyProperties();
+	auto graphicsQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [](vk::QueueFamilyProperties p)
+	{
+		float score = -100;
+		if(p.queueFlags & vk::QueueFlagBits::eGraphics)
+			score += 200.0f;
+		if (p.queueFlags & vk::QueueFlagBits::eTransfer)
+			score += 10.0f;
+		return score;
+	});
+	
+	auto physicalDevice = this->physicalDevice;
+	auto surface = this->surface;
+
+	auto presentQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [physicalDevice, surface](vk::QueueFamilyProperties p, int index)
+	{
+		float score = -100;
+		if (physicalDevice.getSurfaceSupportKHR(index, surface))
+			score += 200;
+		return score;
+	});
+
+	if (graphicsQueue.score <= 0)
+		throw std::exception("Unable to find device queue with graphics support");
+
+	if (presentQueue.score <= 0)
+		throw std::exception("Unable to find device queue with present support");
+	
+	std::set<int> queues;
+	queues.emplace(graphicsQueue.index);
+	queues.emplace(presentQueue.index);
+
+	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
+	for (auto& queue : queues)
+	{
+		float queuePriority = 1.f;
+		queueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), queue, 1, &queuePriority));
+	}
+	int size = queueCreateInfos.size();
+	vk::DeviceCreateInfo createInfo(vk::DeviceCreateFlags(), size, queueCreateInfos.data());
 	this->device = this->physicalDevice.createDevice(createInfo);
+
+	this->queueInfo.graphicsQueue = this->device.getQueue(graphicsQueue.index, 0);
+	this->queueInfo.presentQueue = this->device.getQueue(presentQueue.index, 0);
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
 {
 	this->CreateInstance(window);
+	this->CreateSurface(window);
 	this->PickPhysicalDevice();
 	this->CreateDevice();
 }

@@ -182,6 +182,7 @@
     <ClInclude Include="src\App.hpp" />
     <ClInclude Include="src\gfx\IRenderer.hpp" />
     <ClInclude Include="src\gfx\VulkanRenderer.h" />
+    <ClInclude Include="src\utils\Rating.hpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">
