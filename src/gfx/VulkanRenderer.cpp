@@ -42,31 +42,40 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData)
 {
+	const char* loggerName;
+	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
+		loggerName = "vk-perf";
+	else if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT)
+		loggerName = "vk-val";
+	else
+		loggerName = "vk-general";
+
 	if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT)
-		spdlog::get("vk")->error(pCallbackData->pMessage);
+		spdlog::get(loggerName)->error(pCallbackData->pMessage);
 	else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT)
-		spdlog::get("vk")->warn(pCallbackData->pMessage);
+		spdlog::get(loggerName)->warn(pCallbackData->pMessage);
 	else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-		spdlog::get("vk")->info(pCallbackData->pMessage);
+		spdlog::get(loggerName)->info(pCallbackData->pMessage);
 	else if (severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT)
-		spdlog::get("vk")->trace(pCallbackData->pMessage);
-	return true;
+		spdlog::get(loggerName)->trace(pCallbackData->pMessage);
+
+	return VK_FALSE;
 }
 
 VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
-	if (this->device)
-	{
-		this->device.destroy();
-		this->device = nullptr;
-	}
-
 	if (this->surface)
 	{
 		this->instance.destroySurfaceKHR(this->surface);
 		this->surface = nullptr;
+	}
+
+	if (this->device)
+	{
+		this->device.destroy();
+		this->device = nullptr;
 	}
 
 	this->DestroyDebugCallback();
@@ -77,7 +86,6 @@ VulkanRenderer::~VulkanRenderer()
 		this->instance = nullptr;
 	}
 }
-
 
 void VulkanRenderer::RegisterDebugCallback()
 {
@@ -96,7 +104,8 @@ void VulkanRenderer::RegisterDebugCallback()
 	createInfo.pfnUserCallback = debugCallback;
 	createInfo.pUserData = nullptr;
 
-	auto func = (PFN_vkCreateDebugUtilsMessengerEXT)vkGetInstanceProcAddr(static_cast<VkInstance>(this->instance), "vkCreateDebugUtilsMessengerEXT");
+	const auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(
+		static_cast<VkInstance>(this->instance), "vkCreateDebugUtilsMessengerEXT"));
 	func(static_cast<VkInstance>(this->instance), &createInfo, nullptr, &this->callback);
 }
 
@@ -104,7 +113,8 @@ void VulkanRenderer::DestroyDebugCallback()
 {
 	if (this->callback)
 	{
-		auto func = (PFN_vkDestroyDebugUtilsMessengerEXT)vkGetInstanceProcAddr(static_cast<VkInstance>(this->instance), "vkDestroyDebugUtilsMessengerEXT");
+		const auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(
+			static_cast<VkInstance>(this->instance), "vkDestroyDebugUtilsMessengerEXT"));
 		func(static_cast<VkInstance>(this->instance), this->callback, nullptr);
 		this->callback = 0;
 	}
@@ -115,7 +125,7 @@ void VulkanRenderer::CreateInstance(SDL_Window* window)
 	auto log = spdlog::get("logger");
 	log->info("Initializing vulkan instance");
 
-	vk::ApplicationInfo appInfo("VkPlayground", VK_MAKE_VERSION(0, 1, 0), "unnamed", VK_MAKE_VERSION(0, 1, 0), VK_VERSION_1_1);
+	vk::ApplicationInfo appInfo("VkPlayground", VK_MAKE_VERSION(0, 1, 0), "unnamed", VK_MAKE_VERSION(0, 1, 0), VK_API_VERSION_1_1);
 
 	auto extensions = getExtensions(window);
 	auto layers = getLayers();
@@ -130,15 +140,19 @@ void VulkanRenderer::CreateInstance(SDL_Window* window)
 		this->RegisterDebugCallback();
 }
 
-void VulkanRenderer::CreateSurface(SDL_Window * window)
+void VulkanRenderer::CreateSurface(SDL_Window* window)
 {
-	if (!SDL_Vulkan_CreateSurface(window, this->instance, reinterpret_cast<VkSurfaceKHR*>(&this->surface)))
+	if (!SDL_Vulkan_CreateSurface(window, static_cast<VkInstance>(this->instance), reinterpret_cast<VkSurfaceKHR*>(&this->surface)))
 		throw std::exception(SDL_GetError());
 }
 
-float ratePhysicalDevice(vk::PhysicalDevice physicalDevice)
+float ratePhysicalDevice(vk::PhysicalDevice& physicalDevice)
 {
-	vk::PhysicalDeviceProperties props = physicalDevice.getProperties();
+	auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
+	if (std::find_if(extensions.begin(), extensions.end(), [](vk::ExtensionProperties& ext) { return strcmp(ext.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME); }) == extensions.end())
+		return -1;
+
+	const auto props = physicalDevice.getProperties();
 	if (props.deviceType == vk::PhysicalDeviceType::eDiscreteGpu)
 		return 100;
 	if (props.deviceType == vk::PhysicalDeviceType::eIntegratedGpu)
@@ -153,17 +167,9 @@ float ratePhysicalDevice(vk::PhysicalDevice physicalDevice)
 
 void VulkanRenderer::PickPhysicalDevice()
 {
-	struct Rating
-	{
-		vk::PhysicalDevice device;
-		int32_t score;
-	};
-
-	std::vector<Rating> ratings;
-
 	auto log = spdlog::get("logger");
 
-	int i = 0;
+	auto i = 0;
 	auto deviceList = this->instance.enumeratePhysicalDevices();
 	for (auto& device : deviceList)
 	{
@@ -171,7 +177,7 @@ void VulkanRenderer::PickPhysicalDevice()
 		log->info("[{0}] Name: {1}, Driver: {2}, Api: {3}", i++, props.deviceName, props.driverVersion, props.apiVersion);
 	}
 
-	auto r = GetBestRatedElement<vk::PhysicalDevice>(deviceList, ratePhysicalDevice);
+	const auto r = GetBestRatedElement<vk::PhysicalDevice>(deviceList, ratePhysicalDevice);
 	if (r.score <= 0)
 		throw std::exception("No suitable physical device found");
 
@@ -180,8 +186,8 @@ void VulkanRenderer::PickPhysicalDevice()
 
 void VulkanRenderer::CreateDevice()
 {
-	auto families = this->physicalDevice.getQueueFamilyProperties();
-	auto graphicsQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [](vk::QueueFamilyProperties p)
+	const auto families = this->physicalDevice.getQueueFamilyProperties();
+	auto graphicsQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [](vk::QueueFamilyProperties& p)
 	{
 		float score = -100;
 		if(p.queueFlags & vk::QueueFlagBits::eGraphics)
@@ -194,7 +200,7 @@ void VulkanRenderer::CreateDevice()
 	auto physicalDevice = this->physicalDevice;
 	auto surface = this->surface;
 
-	auto presentQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [physicalDevice, surface](vk::QueueFamilyProperties p, int index)
+	auto presentQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [physicalDevice, surface](vk::QueueFamilyProperties& p, int index)
 	{
 		float score = -100;
 		if (physicalDevice.getSurfaceSupportKHR(index, surface))
@@ -215,11 +221,11 @@ void VulkanRenderer::CreateDevice()
 	std::vector<vk::DeviceQueueCreateInfo> queueCreateInfos;
 	for (auto& queue : queues)
 	{
-		float queuePriority = 1.f;
+		auto queuePriority = 1.f;
 		queueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), queue, 1, &queuePriority));
 	}
-	int size = queueCreateInfos.size();
-	vk::DeviceCreateInfo createInfo(vk::DeviceCreateFlags(), size, queueCreateInfos.data());
+
+	const vk::DeviceCreateInfo createInfo(vk::DeviceCreateFlags(), static_cast<uint32_t>(queueCreateInfos.size()), queueCreateInfos.data());
 	this->device = this->physicalDevice.createDevice(createInfo);
 
 	this->queueInfo.graphicsQueue = this->device.getQueue(graphicsQueue.index, 0);

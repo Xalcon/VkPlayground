@@ -9,7 +9,9 @@
 void setupLogging()
 {
 	spdlog::stdout_color_mt("logger");
-	spdlog::stdout_color_mt("vk");
+	spdlog::stdout_color_mt("vk-perf");
+	spdlog::stdout_color_mt("vk-general");
+	spdlog::stdout_color_mt("vk-val");
 }
 
 int main(int argc, const char* argv[])

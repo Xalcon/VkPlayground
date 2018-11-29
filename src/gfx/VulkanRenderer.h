@@ -17,7 +17,7 @@ class VulkanRenderer :
 	vk::Device device;
 	vk::SurfaceKHR surface;
 
-	QueueInfo queueInfo;
+	QueueInfo queueInfo = {};
 
 	void RegisterDebugCallback();
 	void DestroyDebugCallback();
