@@ -4,8 +4,17 @@
 
 struct QueueInfo
 {
+	uint32_t graphicsQueueFamilyIndex;
 	vk::Queue graphicsQueue;
+	uint32_t presentQueueFamilyIndex;
 	vk::Queue presentQueue;
+};
+
+struct SwapChainSupportDetails
+{
+	vk::SurfaceCapabilitiesKHR capabilities;
+	std::vector<vk::SurfaceFormatKHR> formats;
+	std::vector<vk::PresentModeKHR> presentModes;
 };
 
 class VulkanRenderer :
@@ -16,9 +25,11 @@ class VulkanRenderer :
 	vk::PhysicalDevice physicalDevice;
 	vk::Device device;
 	vk::SurfaceKHR surface;
+	vk::SwapchainKHR swapChain;
+	std::vector<vk::Image> swapChainImages;
 
 	QueueInfo queueInfo = {};
-
+	
 	void RegisterDebugCallback();
 	void DestroyDebugCallback();
 	
@@ -26,6 +37,7 @@ class VulkanRenderer :
 	void CreateSurface(SDL_Window* window);
 	void PickPhysicalDevice();
 	void CreateDevice();
+	void CreateSwapChain(SDL_Window* window);
 
 public:
 	VulkanRenderer();

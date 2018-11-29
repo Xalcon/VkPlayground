@@ -66,6 +66,13 @@ VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
+	if(this->swapChain)
+	{
+		this->device.destroySwapchainKHR(this->swapChain);
+		this->swapChain = nullptr;
+		this->swapChainImages.clear();
+	}
+
 	if (this->surface)
 	{
 		this->instance.destroySurfaceKHR(this->surface);
@@ -95,7 +102,7 @@ void VulkanRenderer::RegisterDebugCallback()
 		vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
 		debugCallback,
 		nullptr);*/
-	// this->instance.createDebugUtilsMessengerEXT(createInfo);
+		// this->instance.createDebugUtilsMessengerEXT(createInfo);
 
 	VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
 	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
@@ -133,7 +140,7 @@ void VulkanRenderer::CreateInstance(SDL_Window* window)
 	for (auto& extension : extensions)
 		log->info("Requesting extension {0}", extension);
 
-	this->instance = vk::createInstance(vk::InstanceCreateInfo(vk::InstanceCreateFlags(), &appInfo, static_cast<uint32_t>(layers.size()), layers.data(), static_cast<uint32_t>(extensions.size()), extensions.data()));
+	this->instance = vk::createInstance(vk::InstanceCreateInfo({}, &appInfo, static_cast<uint32_t>(layers.size()), layers.data(), static_cast<uint32_t>(extensions.size()), extensions.data()));
 	assert(instance);
 
 	if (std::find(extensions.begin(), extensions.end(), VK_EXT_DEBUG_UTILS_EXTENSION_NAME) != extensions.end())
@@ -146,7 +153,7 @@ void VulkanRenderer::CreateSurface(SDL_Window* window)
 		throw std::exception(SDL_GetError());
 }
 
-float ratePhysicalDevice(vk::PhysicalDevice& physicalDevice)
+float ratePhysicalDevice(const vk::PhysicalDevice& physicalDevice)
 {
 	auto extensions = physicalDevice.enumerateDeviceExtensionProperties();
 	if (std::find_if(extensions.begin(), extensions.end(), [](vk::ExtensionProperties& ext) { return strcmp(ext.extensionName, VK_KHR_SWAPCHAIN_EXTENSION_NAME); }) == extensions.end())
@@ -187,20 +194,20 @@ void VulkanRenderer::PickPhysicalDevice()
 void VulkanRenderer::CreateDevice()
 {
 	const auto families = this->physicalDevice.getQueueFamilyProperties();
-	auto graphicsQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [](vk::QueueFamilyProperties& p)
+	auto graphicsQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [](const auto& p)
 	{
 		float score = -100;
-		if(p.queueFlags & vk::QueueFlagBits::eGraphics)
+		if (p.queueFlags & vk::QueueFlagBits::eGraphics)
 			score += 200.0f;
 		if (p.queueFlags & vk::QueueFlagBits::eTransfer)
 			score += 10.0f;
 		return score;
 	});
-	
+
 	auto physicalDevice = this->physicalDevice;
 	auto surface = this->surface;
 
-	auto presentQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [physicalDevice, surface](vk::QueueFamilyProperties& p, int index)
+	auto presentQueue = GetBestRatedElement<vk::QueueFamilyProperties>(families, [physicalDevice, surface](const auto& p, int index)
 	{
 		float score = -100;
 		if (physicalDevice.getSurfaceSupportKHR(index, surface))
@@ -213,7 +220,7 @@ void VulkanRenderer::CreateDevice()
 
 	if (presentQueue.score <= 0)
 		throw std::exception("Unable to find device queue with present support");
-	
+
 	std::set<int> queues;
 	queues.emplace(graphicsQueue.index);
 	queues.emplace(presentQueue.index);
@@ -222,14 +229,111 @@ void VulkanRenderer::CreateDevice()
 	for (auto& queue : queues)
 	{
 		auto queuePriority = 1.f;
-		queueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo(vk::DeviceQueueCreateFlags(), queue, 1, &queuePriority));
+		queueCreateInfos.emplace_back(vk::DeviceQueueCreateInfo({}, queue, 1, &queuePriority));
 	}
 
-	const vk::DeviceCreateInfo createInfo(vk::DeviceCreateFlags(), static_cast<uint32_t>(queueCreateInfos.size()), queueCreateInfos.data());
+	std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+	const vk::DeviceCreateInfo createInfo({}, static_cast<uint32_t>(queueCreateInfos.size()), queueCreateInfos.data(), 0, nullptr, static_cast<uint32_t>(deviceExtensions.size()), deviceExtensions.data());
 	this->device = this->physicalDevice.createDevice(createInfo);
 
+	this->queueInfo.graphicsQueueFamilyIndex = graphicsQueue.index;
+	this->queueInfo.presentQueueFamilyIndex = presentQueue.index;
 	this->queueInfo.graphicsQueue = this->device.getQueue(graphicsQueue.index, 0);
 	this->queueInfo.presentQueue = this->device.getQueue(presentQueue.index, 0);
+}
+
+void VulkanRenderer::CreateSwapChain(SDL_Window* window)
+{
+	SwapChainSupportDetails details;
+	details.capabilities = this->physicalDevice.getSurfaceCapabilitiesKHR(this->surface);
+	details.formats = this->physicalDevice.getSurfaceFormatsKHR(this->surface);
+	details.presentModes = this->physicalDevice.getSurfacePresentModesKHR(this->surface);
+
+	if (details.formats.empty())
+		throw std::exception("SwapChain incompatible: no supported surface formats found");
+
+	if (details.presentModes.empty())
+		throw std::exception("SwapChain incompatible: no supported present modes found");
+
+	vk::SurfaceFormatKHR format;
+
+	if (details.formats.size() == 1 && details.formats[0].format == vk::Format::eUndefined)
+		format = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eVkColorspaceSrgbNonlinear };
+	else
+	{
+		const auto bestFormat = GetBestRatedElement<vk::SurfaceFormatKHR>(details.formats, [](const vk::SurfaceFormatKHR& sf, int index)
+		{
+			auto score = 0.f;
+			if (sf.format == vk::Format::eB8G8R8A8Unorm)
+				score += 100.f;
+			if (sf.colorSpace == vk::ColorSpaceKHR::eVkColorspaceSrgbNonlinear)
+				score += 100.f;
+			return score;
+		});
+
+		if(bestFormat.score > 0)
+			format = bestFormat.element;
+		else
+			format = details.formats[0];
+	}
+
+	const auto bestPresentMode = GetBestRatedElement<vk::PresentModeKHR>(details.presentModes, [](const vk::PresentModeKHR& mode, int index)
+	{
+		switch (mode)
+		{
+		case vk::PresentModeKHR::eMailbox:
+			return 3.f;
+		case vk::PresentModeKHR::eFifo:
+			return 2.f;
+		case vk::PresentModeKHR::eImmediate:
+			return 1.f;
+		case vk::PresentModeKHR::eFifoRelaxed:
+		case vk::PresentModeKHR::eSharedContinuousRefresh:
+		case vk::PresentModeKHR::eSharedDemandRefresh:
+		default:
+			return 0.f;
+		}
+	});
+
+	vk::Extent2D extend;
+	if(details.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
+		extend = details.capabilities.currentExtent;
+	else
+	{
+		int width, height;
+		SDL_GetWindowSize(window, &width, &height);
+		const auto minExtent = details.capabilities.minImageExtent;
+		const auto maxExtent = details.capabilities.maxImageExtent;
+		extend = { std::clamp(minExtent.width, maxExtent.width, static_cast<uint32_t>(width)), std::clamp(minExtent.height, maxExtent.height, static_cast<uint32_t>(height)) };
+	}
+
+	auto imageCount = details.capabilities.minImageCount;
+	if(bestPresentMode.element == vk::PresentModeKHR::eMailbox)
+		imageCount += 1; // use triple buffering for Mailbox Present mode
+
+	if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
+	    imageCount = details.capabilities.maxImageCount;
+
+	vk::SwapchainCreateInfoKHR swapchainCreateInfo({},
+		this->surface, imageCount, format.format, format.colorSpace, extend, 1, vk::ImageUsageFlagBits::eColorAttachment,
+		vk::SharingMode::eExclusive, 
+		0, nullptr, 
+		details.capabilities.currentTransform,
+		vk::CompositeAlphaFlagBitsKHR::eOpaque,
+		bestPresentMode.element, VK_TRUE, nullptr);
+
+	if(this->queueInfo.graphicsQueueFamilyIndex != this->queueInfo.presentQueueFamilyIndex)
+	{
+		uint32_t queues[] = { this->queueInfo.graphicsQueueFamilyIndex, this->queueInfo.presentQueueFamilyIndex };
+		// TODO: [Performance] convert this into Exclusive mode and handle ownership transfer during rendering
+		swapchainCreateInfo.imageSharingMode = vk::SharingMode::eConcurrent;
+		swapchainCreateInfo.queueFamilyIndexCount = 2;
+		swapchainCreateInfo.pQueueFamilyIndices = queues;
+	}
+
+	this->swapChain = this->device.createSwapchainKHR(swapchainCreateInfo);
+	this->swapChainImages = this->device.getSwapchainImagesKHR(this->swapChain);
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
@@ -238,4 +342,5 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->CreateSurface(window);
 	this->PickPhysicalDevice();
 	this->CreateDevice();
+	this->CreateSwapChain(window);
 }

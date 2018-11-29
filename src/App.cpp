@@ -3,6 +3,16 @@
 #include <vulkan/vulkan.hpp>
 #include <SDL_vulkan.h>
 
+bool is64Bit()
+{
+#if _WIN64
+	return true;
+#elif _WIN32
+	return false;
+#else
+#error Unknown platform
+#endif
+}
 
 App::App(std::function<std::unique_ptr<IRenderer>()> renderFactory)
 {
@@ -19,7 +29,7 @@ void App::InitWindow()
 {
 	auto log = spdlog::get("logger");
 	this->window = SDL_CreateWindow(
-		"VkPlayground",
+		!is64Bit() ? "VkPlayground - 32Bit" : "VkPlayground - 64Bit",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		800, 480,
 		SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN

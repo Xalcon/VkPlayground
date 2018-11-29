@@ -11,7 +11,7 @@ struct Rating
 };
 
 template <typename TElement>
-Rating<TElement> GetBestRatedElement(std::vector<TElement> elements, std::function<float(TElement&)> ratingCallback)
+Rating<TElement> GetBestRatedElement(std::vector<TElement> elements, std::function<float(const TElement&)> ratingCallback)
 {
 	std::vector<Rating<TElement>> list;
 	auto  i = 0;
@@ -22,7 +22,7 @@ Rating<TElement> GetBestRatedElement(std::vector<TElement> elements, std::functi
 }
 
 template <typename TElement>
-Rating<TElement> GetBestRatedElement(std::vector<TElement> elements, std::function<float(TElement&, int)> ratingCallback)
+Rating<TElement> GetBestRatedElement(std::vector<TElement> elements, std::function<float(const TElement&, int)> ratingCallback)
 {
 	std::vector<Rating<TElement>> list;
 	auto i = 0;
