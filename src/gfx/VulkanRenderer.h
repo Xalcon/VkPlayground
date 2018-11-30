@@ -15,7 +15,7 @@ struct SwapChainDetails
 	vk::Format format;
 	vk::ColorSpaceKHR colorSpace;
 	vk::PresentModeKHR presentMode;
-	vk::Extent2D extend;
+	vk::Extent2D extent;
 };
 
 class VulkanRenderer :
@@ -29,7 +29,13 @@ class VulkanRenderer :
 	vk::SwapchainKHR swapChain;
 	std::vector<vk::Image> swapChainImages;
 	std::vector<vk::ImageView> swapChainImageViews;
-
+	vk::RenderPass renderPass;
+	vk::PipelineLayout pipelineLayout;
+	vk::Pipeline pipeline;
+	std::vector<vk::Framebuffer> frameBuffers;
+	vk::CommandPool commandPool;
+	std::vector<vk::CommandBuffer> commandBuffers;
+	
 	QueueInfo queueInfo = {};
 	SwapChainDetails swapChainDetails = {};
 	
@@ -41,7 +47,11 @@ class VulkanRenderer :
 	void PickPhysicalDevice();
 	void CreateDevice();
 	void CreateSwapChain(SDL_Window* window);
+	void CreateRenderPass();
 	void CreateGraphicsPipeline();
+	void CreateFrameBuffers();
+	void CreateCommandPool();
+	void CreateCommandBuffers();
 
 public:
 	VulkanRenderer();

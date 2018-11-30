@@ -10,9 +10,10 @@
     <ClInclude Include="src\gfx\IRenderer.hpp" />
     <ClInclude Include="src\gfx\VulkanRenderer.h" />
     <ClInclude Include="src\utils\Rating.hpp" />
+    <ClInclude Include="src\utils\Utils.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\vertex.shader.glsl" />
-    <None Include="shaders\fragment.shader.glsl" />
+    <None Include="shader\triangle.frag" />
+    <None Include="shader\triangle.vert" />
   </ItemGroup>
 </Project>

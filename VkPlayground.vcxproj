@@ -73,29 +73,25 @@
     <OutDir>$(SolutionDir)bin\$(Configuration)_$(PlatformShortName)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Configuration)_$(PlatformShortName)\</IntDir>
     <SourcePath>$(SourcePath)</SourcePath>
-    <CustomBuildAfterTargets>
-    </CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <OutDir>$(SolutionDir)bin\$(Configuration)_$(PlatformShortName)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Configuration)_$(PlatformShortName)\</IntDir>
     <SourcePath>$(SourcePath)</SourcePath>
-    <CustomBuildAfterTargets>
-    </CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <OutDir>$(SolutionDir)bin\$(Configuration)_$(PlatformShortName)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Configuration)_$(PlatformShortName)\</IntDir>
     <SourcePath>$(SourcePath)</SourcePath>
-    <CustomBuildAfterTargets>
-    </CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <OutDir>$(SolutionDir)bin\$(Configuration)_$(PlatformShortName)\</OutDir>
     <IntDir>$(SolutionDir)build\$(Configuration)_$(PlatformShortName)\</IntDir>
     <SourcePath>$(SourcePath)</SourcePath>
-    <CustomBuildAfterTargets>
-    </CustomBuildAfterTargets>
+    <CustomBuildAfterTargets>Build</CustomBuildAfterTargets>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
@@ -116,17 +112,17 @@
       <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>
-      </Command>
+      <Command>powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File $(ProjectDir)\build-shaders.ps1</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Outputs>
-      </Outputs>
+      <Outputs>something</Outputs>
     </CustomBuildStep>
     <CustomBuildStep />
     <CustomBuild>
-      <Command>$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Outputs>%(Filename).spv</Outputs>
+      <Command>
+      </Command>
+      <Outputs>
+      </Outputs>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -148,17 +144,17 @@
       <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>
-      </Command>
+      <Command>powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File $(ProjectDir)\build-shaders.ps1</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Outputs>
-      </Outputs>
+      <Outputs>something</Outputs>
     </CustomBuildStep>
     <CustomBuildStep />
     <CustomBuild>
-      <Command>$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Outputs>%(Filename).spv</Outputs>
+      <Command>
+      </Command>
+      <Outputs>
+      </Outputs>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
@@ -184,17 +180,17 @@
       <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>
-      </Command>
+      <Command>powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File $(ProjectDir)\build-shaders.ps1</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Outputs>
-      </Outputs>
+      <Outputs>something</Outputs>
     </CustomBuildStep>
     <CustomBuildStep />
     <CustomBuild>
-      <Command>$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Outputs>%(Filename).spv</Outputs>
+      <Command>
+      </Command>
+      <Outputs>
+      </Outputs>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
@@ -220,17 +216,17 @@
       <Command>xcopy $(SolutionDir)extern\libsdl\msvc_build\$(platformShortName)\$(configuration)\SDL2.dll $(OutDir) /Y</Command>
     </PostBuildEvent>
     <CustomBuildStep>
-      <Command>
-      </Command>
+      <Command>powershell -ExecutionPolicy Bypass -NoProfile -NonInteractive -File $(ProjectDir)\build-shaders.ps1</Command>
     </CustomBuildStep>
     <CustomBuildStep>
-      <Outputs>
-      </Outputs>
+      <Outputs>something</Outputs>
     </CustomBuildStep>
     <CustomBuildStep />
     <CustomBuild>
-      <Command>$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Outputs>%(Filename).spv</Outputs>
+      <Command>
+      </Command>
+      <Outputs>
+      </Outputs>
     </CustomBuild>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -243,19 +239,11 @@
     <ClInclude Include="src\gfx\IRenderer.hpp" />
     <ClInclude Include="src\gfx\VulkanRenderer.h" />
     <ClInclude Include="src\utils\Rating.hpp" />
+    <ClInclude Include="src\utils\Utils.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shaders\triangle.frag">
-      <FileType>Document</FileType>
-      <DeploymentContent>false</DeploymentContent>
-    </None>
-    <CustomBuild Include="shaders\triangle.vert">
-      <FileType>Document</FileType>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-      <Command Condition="'$(Configuration)|$(Platform)'=='Release|x64'">$(VULKAN_SDK)\bin\glslangValidator.exe -V %(FullPath)</Command>
-    </CustomBuild>
+    <None Include="shader\triangle.frag" />
+    <None Include="shader\triangle.vert" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

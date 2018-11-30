@@ -384,3 +384,5 @@ ASALocalRun/
 # End of https://www.gitignore.io/api/c++,visualstudio,visualstudiocode
 
 build/
+# we dont want to commit SPIR-V shaders
+*.spv

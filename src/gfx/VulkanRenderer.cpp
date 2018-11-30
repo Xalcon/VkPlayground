@@ -5,6 +5,7 @@
 #include <SDL_vulkan.h>
 #include <spdlog/spdlog.h>
 #include "../utils/Rating.hpp"
+#include <fstream>
 
 std::vector<const char*> getExtensions(SDL_Window* window)
 {
@@ -69,6 +70,39 @@ VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
+	if(this->commandPool)
+	{
+		this->device.destroyCommandPool(this->commandPool);
+		this->commandPool = nullptr;
+	}
+
+	if(!this->frameBuffers.empty())
+	{
+		for (auto& frameBuffer : this->frameBuffers)
+		{
+			this->device.destroyFramebuffer(frameBuffer);
+		}
+		this->frameBuffers.clear();
+	}
+
+	if(this->pipeline)
+	{
+		this->device.destroyPipeline(this->pipeline);
+		this->pipeline = nullptr;
+	}
+
+	if(this->pipelineLayout)
+	{
+		this->device.destroyPipelineLayout(this->pipelineLayout);
+		this->pipelineLayout = nullptr;
+	}
+
+	if(this->renderPass)
+	{
+		this->device.destroyRenderPass(this->renderPass);
+		this->renderPass = nullptr;
+	}
+
 	if (!this->swapChainImageViews.empty())
 	{
 		for (auto& imageView : this->swapChainImageViews)
@@ -356,7 +390,7 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	this->swapChain = this->device.createSwapchainKHR(swapchainCreateInfo);
 	this->swapChainImages = this->device.getSwapchainImagesKHR(this->swapChain);
 
-	this->swapChainDetails = { surfaceFormat.format, surfaceFormat.colorSpace, bestPresentMode.element };
+	this->swapChainDetails = { surfaceFormat.format, surfaceFormat.colorSpace, bestPresentMode.element, extend };
 
 	for (auto& image : this->swapChainImages)
 	{
@@ -365,9 +399,114 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	}
 }
 
+void VulkanRenderer::CreateRenderPass()
+{
+	vk::AttachmentDescription colorAttachment({}, this->swapChainDetails.format,
+		vk::SampleCountFlagBits::e1, vk::AttachmentLoadOp::eClear, vk::AttachmentStoreOp::eStore,
+		vk::AttachmentLoadOp::eDontCare, vk::AttachmentStoreOp::eDontCare,
+		vk::ImageLayout::eUndefined, vk::ImageLayout::ePresentSrcKHR);
+
+	vk::AttachmentReference colorAttachmentRef(0, vk::ImageLayout::eColorAttachmentOptimal);
+	vk::SubpassDescription subpass({}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &colorAttachmentRef);
+
+	const vk::RenderPassCreateInfo createInfo({}, 1, &colorAttachment, 1, &subpass);
+	this->renderPass = this->device.createRenderPass(createInfo);
+}
+
+static std::vector<char> readFile(const std::string& filename)
+{
+	std::ifstream file(filename, std::ios::ate | std::ios::binary);
+	if(file.fail())
+		throw std::exception(std::string("unable to open " + filename).c_str());
+
+	const auto fileSize = file.tellg();
+	std::vector<char> buffer(fileSize);
+	file.seekg(0);
+	file.read(buffer.data(), fileSize);
+	file.close();
+	return buffer;
+}
+
+static vk::ShaderModule createShaderModule(const std::vector<char>& code, const vk::Device& device)
+{
+	const vk::ShaderModuleCreateInfo createInfo({}, code.size(), reinterpret_cast<const uint32_t*>(code.data()));
+	return device.createShaderModule(createInfo);
+}
+
 void VulkanRenderer::CreateGraphicsPipeline()
 {
+	const auto vertShader = createShaderModule(readFile("shader/triangle.vert.spv"), this->device);
+	const auto fragShader = createShaderModule(readFile("shader/triangle.frag.spv"), this->device);
 
+	const vk::PipelineShaderStageCreateInfo vertShaderStageInfo({}, vk::ShaderStageFlagBits::eVertex, vertShader, "main");
+	const vk::PipelineShaderStageCreateInfo fragShaderStageInfo({}, vk::ShaderStageFlagBits::eFragment, fragShader, "main");
+
+	vk::PipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
+
+	vk::PipelineVertexInputStateCreateInfo vertexInputInfo({},  0, nullptr, 0, nullptr);
+	vk::PipelineInputAssemblyStateCreateInfo inputAssembly({}, vk::PrimitiveTopology::eTriangleList, VK_FALSE);
+	auto width = static_cast<float>(this->swapChainDetails.extent.width), height = static_cast<float>(this->swapChainDetails.extent.height);
+	vk::Viewport viewport(0, 0, width, height, 0.f, 1.f);
+	vk::Rect2D scissor({}, this->swapChainDetails.extent);
+	vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, & scissor);
+	vk::PipelineRasterizationStateCreateInfo rasterizerState({}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise, 0, 0, 0, 0, 1.f);
+	// enabling multisampling requires a GPU logical device feature to be enabled during creation
+	vk::PipelineMultisampleStateCreateInfo multisampleState({}, vk::SampleCountFlagBits::e1, VK_FALSE, 1.f, nullptr, VK_FALSE, VK_FALSE);
+	//vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({});
+	vk::PipelineColorBlendAttachmentState colorBlendAttachment(VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd);
+	vk::PipelineColorBlendStateCreateInfo colorBlending({}, VK_FALSE, vk::LogicOp::eCopy, 1, &colorBlendAttachment);
+
+	vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo({}, 0, nullptr, 0, nullptr);
+	this->pipelineLayout = this->device.createPipelineLayout(pipelineLayoutCreateInfo);
+
+	vk::GraphicsPipelineCreateInfo pipelineCreateInfo({}, 2, shaderStages, &vertexInputInfo, &inputAssembly, nullptr, &viewportState, &rasterizerState, &multisampleState, nullptr, &colorBlending, nullptr, this->pipelineLayout, this->renderPass, 0, nullptr, -1);
+	this->pipeline = this->device.createGraphicsPipelines(nullptr, vk::ArrayProxy<const vk::GraphicsPipelineCreateInfo>(1, &pipelineCreateInfo))[0];
+
+	this->device.destroyShaderModule(vertShader);
+	this->device.destroyShaderModule(fragShader);
+}
+
+void VulkanRenderer::CreateFrameBuffers()
+{
+	for (auto& swapChainImageView : this->swapChainImageViews)
+	{
+		const auto extent = this->swapChainDetails.extent;
+		vk::FramebufferCreateInfo framebufferCreateInfo({}, this->renderPass, 1, &swapChainImageView, extent.width, extent.height, 1);
+
+		this->frameBuffers.emplace_back(this->device.createFramebuffer(framebufferCreateInfo));
+	}
+}
+
+void VulkanRenderer::CreateCommandPool()
+{
+	const vk::CommandPoolCreateInfo createInfo({}, this->queueInfo.graphicsQueueFamilyIndex);
+	this->commandPool = this->device.createCommandPool(createInfo);
+}
+
+void VulkanRenderer::CreateCommandBuffers()
+{
+	const vk::CommandBufferAllocateInfo allocateInfo(this->commandPool, vk::CommandBufferLevel::ePrimary, this->frameBuffers.size());
+	this->commandBuffers = this->device.allocateCommandBuffers(allocateInfo);
+
+	for(auto i = 0; i < this->commandBuffers.size(); i++)
+	{
+		auto commandBuffer = this->commandBuffers[i];
+		vk::CommandBufferBeginInfo beginInfo(vk::CommandBufferUsageFlagBits::eSimultaneousUse, nullptr);
+		commandBuffer.begin(beginInfo);
+
+		vk::ClearValue clearValue[] = 
+		{
+			vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, 0.f })
+		};
+		vk::RenderPassBeginInfo renderPassInfo(this->renderPass, this->frameBuffers[i], vk::Rect2D({0, 0}, this->swapChainDetails.extent), 1, clearValue);
+		commandBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, this->pipeline);
+
+		commandBuffer.draw(3, 1, 0, 0);
+
+		commandBuffer.endRenderPass();
+		commandBuffer.end();
+	}
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
@@ -377,5 +516,9 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->PickPhysicalDevice();
 	this->CreateDevice();
 	this->CreateSwapChain(window);
+	this->CreateRenderPass();
 	this->CreateGraphicsPipeline();
+	this->CreateFrameBuffers();
+	this->CreateCommandPool();
+	this->CreateCommandBuffers();
 }
