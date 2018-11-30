@@ -70,6 +70,20 @@ VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
+	this->device.waitIdle();
+
+	if(this->imageAvailableSemaphore)
+	{
+		this->device.destroySemaphore(this->imageAvailableSemaphore);
+		this->imageAvailableSemaphore = nullptr;
+	}
+
+	if(this->renderFinishedSemaphore)
+	{
+		this->device.destroySemaphore(this->renderFinishedSemaphore);
+		this->renderFinishedSemaphore = nullptr;
+	}
+
 	if(this->commandPool)
 	{
 		this->device.destroyCommandPool(this->commandPool);
@@ -408,8 +422,13 @@ void VulkanRenderer::CreateRenderPass()
 
 	vk::AttachmentReference colorAttachmentRef(0, vk::ImageLayout::eColorAttachmentOptimal);
 	vk::SubpassDescription subpass({}, vk::PipelineBindPoint::eGraphics, 0, nullptr, 1, &colorAttachmentRef);
+	vk::SubpassDependency subpassDependency(
+		VK_SUBPASS_EXTERNAL, 0,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		vk::PipelineStageFlagBits::eColorAttachmentOutput,
+		{}, vk::AccessFlagBits::eColorAttachmentRead | vk::AccessFlagBits::eColorAttachmentWrite);
 
-	const vk::RenderPassCreateInfo createInfo({}, 1, &colorAttachment, 1, &subpass);
+	const vk::RenderPassCreateInfo createInfo({}, 1, &colorAttachment, 1, &subpass, 1, &subpassDependency);
 	this->renderPass = this->device.createRenderPass(createInfo);
 }
 
@@ -448,7 +467,7 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	auto width = static_cast<float>(this->swapChainDetails.extent.width), height = static_cast<float>(this->swapChainDetails.extent.height);
 	vk::Viewport viewport(0, 0, width, height, 0.f, 1.f);
 	vk::Rect2D scissor({}, this->swapChainDetails.extent);
-	vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, & scissor);
+	vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, &scissor);
 	vk::PipelineRasterizationStateCreateInfo rasterizerState({}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise, 0, 0, 0, 0, 1.f);
 	// enabling multisampling requires a GPU logical device feature to be enabled during creation
 	vk::PipelineMultisampleStateCreateInfo multisampleState({}, vk::SampleCountFlagBits::e1, VK_FALSE, 1.f, nullptr, VK_FALSE, VK_FALSE);
@@ -496,7 +515,7 @@ void VulkanRenderer::CreateCommandBuffers()
 
 		vk::ClearValue clearValue[] = 
 		{
-			vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, 0.f })
+			vk::ClearColorValue(std::array<float, 4> { 0.f, 0.f, 0.f, 1.f })
 		};
 		vk::RenderPassBeginInfo renderPassInfo(this->renderPass, this->frameBuffers[i], vk::Rect2D({0, 0}, this->swapChainDetails.extent), 1, clearValue);
 		commandBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
@@ -507,6 +526,12 @@ void VulkanRenderer::CreateCommandBuffers()
 		commandBuffer.endRenderPass();
 		commandBuffer.end();
 	}
+}
+
+void VulkanRenderer::CreateSemaphores()
+{
+	this->imageAvailableSemaphore = this->device.createSemaphore({});
+	this->renderFinishedSemaphore = this->device.createSemaphore({});
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
@@ -521,4 +546,24 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->CreateFrameBuffers();
 	this->CreateCommandPool();
 	this->CreateCommandBuffers();
+	this->CreateSemaphores();
+}
+
+void VulkanRenderer::Draw()
+{
+	const auto imageResult = this->device.acquireNextImageKHR(this->swapChain, std::numeric_limits<uint64_t>::max(), this->imageAvailableSemaphore, nullptr);
+	if(imageResult.result != vk::Result::eSuccess)
+		throw std::exception("Unable to retrieve image from swap chain");
+
+	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
+	vk::SubmitInfo submitInfo(1, &this->imageAvailableSemaphore, waitStages, 1, &this->commandBuffers[imageResult.value], 1, &this->renderFinishedSemaphore);
+
+	if(this->queueInfo.graphicsQueue.submit(1, &submitInfo, nullptr) != vk::Result::eSuccess)
+		throw std::exception("error while submitting command buffer to graphics queue");
+
+	vk::PresentInfoKHR presentInfo(1, &this->renderFinishedSemaphore, 1, &this->swapChain, &imageResult.value);
+	if(this->queueInfo.presentQueue.presentKHR(presentInfo) != vk::Result::eSuccess)
+		throw std::exception("Error presenting next frame");
+
+	this->queueInfo.presentQueue.waitIdle();
 }

@@ -61,6 +61,7 @@ void App::MainLoop()
 			}
 		}
 		//Render the scene
+		this->renderer->Draw();
 	}
 	log->info("Shutting down");
 }

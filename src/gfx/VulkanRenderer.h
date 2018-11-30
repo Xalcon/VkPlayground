@@ -35,6 +35,8 @@ class VulkanRenderer :
 	std::vector<vk::Framebuffer> frameBuffers;
 	vk::CommandPool commandPool;
 	std::vector<vk::CommandBuffer> commandBuffers;
+	vk::Semaphore imageAvailableSemaphore;
+	vk::Semaphore renderFinishedSemaphore;
 	
 	QueueInfo queueInfo = {};
 	SwapChainDetails swapChainDetails = {};
@@ -52,10 +54,12 @@ class VulkanRenderer :
 	void CreateFrameBuffers();
 	void CreateCommandPool();
 	void CreateCommandBuffers();
+	void CreateSemaphores();
 
 public:
 	VulkanRenderer();
 	virtual ~VulkanRenderer();
 	void Initialize(SDL_Window* window) override;
+	void Draw() override;
 };
 
