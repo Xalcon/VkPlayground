@@ -42,6 +42,9 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData)
 {
+	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+		return VK_FALSE;
+
 	const char* loggerName;
 	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
 		loggerName = "vk-perf";
@@ -66,6 +69,15 @@ VulkanRenderer::VulkanRenderer() = default;
 
 VulkanRenderer::~VulkanRenderer()
 {
+	if (!this->swapChainImageViews.empty())
+	{
+		for (auto& imageView : this->swapChainImageViews)
+		{
+			this->device.destroyImageView(imageView);
+		}
+		this->swapChainImageViews.clear();
+	}
+
 	if(this->swapChain)
 	{
 		this->device.destroySwapchainKHR(this->swapChain);
@@ -189,6 +201,8 @@ void VulkanRenderer::PickPhysicalDevice()
 		throw std::exception("No suitable physical device found");
 
 	this->physicalDevice = r.element;
+	auto props = this->physicalDevice.getProperties();
+	log->info("Using GPU {0}", props.deviceName);
 }
 
 void VulkanRenderer::CreateDevice()
@@ -245,6 +259,13 @@ void VulkanRenderer::CreateDevice()
 
 void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 {
+	struct SwapChainSupportDetails
+	{
+		vk::SurfaceCapabilitiesKHR capabilities;
+		std::vector<vk::SurfaceFormatKHR> formats;
+		std::vector<vk::PresentModeKHR> presentModes;
+	};
+
 	SwapChainSupportDetails details;
 	details.capabilities = this->physicalDevice.getSurfaceCapabilitiesKHR(this->surface);
 	details.formats = this->physicalDevice.getSurfaceFormatsKHR(this->surface);
@@ -256,10 +277,10 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	if (details.presentModes.empty())
 		throw std::exception("SwapChain incompatible: no supported present modes found");
 
-	vk::SurfaceFormatKHR format;
+	vk::SurfaceFormatKHR surfaceFormat;
 
 	if (details.formats.size() == 1 && details.formats[0].format == vk::Format::eUndefined)
-		format = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eVkColorspaceSrgbNonlinear };
+		surfaceFormat = { vk::Format::eB8G8R8A8Unorm, vk::ColorSpaceKHR::eVkColorspaceSrgbNonlinear };
 	else
 	{
 		const auto bestFormat = GetBestRatedElement<vk::SurfaceFormatKHR>(details.formats, [](const vk::SurfaceFormatKHR& sf, int index)
@@ -273,9 +294,9 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 		});
 
 		if(bestFormat.score > 0)
-			format = bestFormat.element;
+			surfaceFormat = bestFormat.element;
 		else
-			format = details.formats[0];
+			surfaceFormat = details.formats[0];
 	}
 
 	const auto bestPresentMode = GetBestRatedElement<vk::PresentModeKHR>(details.presentModes, [](const vk::PresentModeKHR& mode, int index)
@@ -316,7 +337,7 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	    imageCount = details.capabilities.maxImageCount;
 
 	vk::SwapchainCreateInfoKHR swapchainCreateInfo({},
-		this->surface, imageCount, format.format, format.colorSpace, extend, 1, vk::ImageUsageFlagBits::eColorAttachment,
+		this->surface, imageCount, surfaceFormat.format, surfaceFormat.colorSpace, extend, 1, vk::ImageUsageFlagBits::eColorAttachment,
 		vk::SharingMode::eExclusive, 
 		0, nullptr, 
 		details.capabilities.currentTransform,
@@ -334,6 +355,19 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 
 	this->swapChain = this->device.createSwapchainKHR(swapchainCreateInfo);
 	this->swapChainImages = this->device.getSwapchainImagesKHR(this->swapChain);
+
+	this->swapChainDetails = { surfaceFormat.format, surfaceFormat.colorSpace, bestPresentMode.element };
+
+	for (auto& image : this->swapChainImages)
+	{
+		vk::ImageViewCreateInfo createInfo({}, image, vk::ImageViewType::e2D, surfaceFormat.format, {}, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
+		this->swapChainImageViews.emplace_back(this->device.createImageView(createInfo));
+	}
+}
+
+void VulkanRenderer::CreateGraphicsPipeline()
+{
+
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
@@ -343,4 +377,5 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->PickPhysicalDevice();
 	this->CreateDevice();
 	this->CreateSwapChain(window);
+	this->CreateGraphicsPipeline();
 }

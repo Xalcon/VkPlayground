@@ -11,4 +11,8 @@
     <ClInclude Include="src\gfx\VulkanRenderer.h" />
     <ClInclude Include="src\utils\Rating.hpp" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="shaders\vertex.shader.glsl" />
+    <None Include="shaders\fragment.shader.glsl" />
+  </ItemGroup>
 </Project>

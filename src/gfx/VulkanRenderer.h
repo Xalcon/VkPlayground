@@ -10,11 +10,12 @@ struct QueueInfo
 	vk::Queue presentQueue;
 };
 
-struct SwapChainSupportDetails
+struct SwapChainDetails
 {
-	vk::SurfaceCapabilitiesKHR capabilities;
-	std::vector<vk::SurfaceFormatKHR> formats;
-	std::vector<vk::PresentModeKHR> presentModes;
+	vk::Format format;
+	vk::ColorSpaceKHR colorSpace;
+	vk::PresentModeKHR presentMode;
+	vk::Extent2D extend;
 };
 
 class VulkanRenderer :
@@ -27,8 +28,10 @@ class VulkanRenderer :
 	vk::SurfaceKHR surface;
 	vk::SwapchainKHR swapChain;
 	std::vector<vk::Image> swapChainImages;
+	std::vector<vk::ImageView> swapChainImageViews;
 
 	QueueInfo queueInfo = {};
+	SwapChainDetails swapChainDetails = {};
 	
 	void RegisterDebugCallback();
 	void DestroyDebugCallback();
@@ -38,6 +41,7 @@ class VulkanRenderer :
 	void PickPhysicalDevice();
 	void CreateDevice();
 	void CreateSwapChain(SDL_Window* window);
+	void CreateGraphicsPipeline();
 
 public:
 	VulkanRenderer();
