@@ -43,8 +43,8 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData)
 {
-	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-		return VK_FALSE;
+	/*if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+		return VK_FALSE;*/
 
 	const char* loggerName;
 	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
@@ -466,13 +466,13 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	vk::PipelineInputAssemblyStateCreateInfo inputAssembly({}, vk::PrimitiveTopology::eTriangleList, VK_FALSE);
 	auto width = static_cast<float>(this->swapChainDetails.extent.width), height = static_cast<float>(this->swapChainDetails.extent.height);
 	vk::Viewport viewport(0, 0, width, height, 0.f, 1.f);
-	vk::Rect2D scissor({}, this->swapChainDetails.extent);
+	vk::Rect2D scissor({0, 0}, this->swapChainDetails.extent);
 	vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, &scissor);
 	vk::PipelineRasterizationStateCreateInfo rasterizerState({}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise, 0, 0, 0, 0, 1.f);
 	// enabling multisampling requires a GPU logical device feature to be enabled during creation
 	vk::PipelineMultisampleStateCreateInfo multisampleState({}, vk::SampleCountFlagBits::e1, VK_FALSE, 1.f, nullptr, VK_FALSE, VK_FALSE);
 	//vk::PipelineDepthStencilStateCreateInfo depthStencilInfo({});
-	vk::PipelineColorBlendAttachmentState colorBlendAttachment(VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd);
+	vk::PipelineColorBlendAttachmentState colorBlendAttachment(VK_TRUE, vk::BlendFactor::eSrcAlpha, vk::BlendFactor::eOneMinusSrcAlpha, vk::BlendOp::eAdd, vk::BlendFactor::eOne, vk::BlendFactor::eZero, vk::BlendOp::eAdd, vk::ColorComponentFlagBits::eR | vk::ColorComponentFlagBits::eG | vk::ColorComponentFlagBits::eB | vk::ColorComponentFlagBits::eA);
 	vk::PipelineColorBlendStateCreateInfo colorBlending({}, VK_FALSE, vk::LogicOp::eCopy, 1, &colorBlendAttachment);
 
 	vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo({}, 0, nullptr, 0, nullptr);
