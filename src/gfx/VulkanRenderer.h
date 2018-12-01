@@ -35,11 +35,13 @@ class VulkanRenderer :
 	std::vector<vk::Framebuffer> frameBuffers;
 	vk::CommandPool commandPool;
 	std::vector<vk::CommandBuffer> commandBuffers;
-	vk::Semaphore imageAvailableSemaphore;
-	vk::Semaphore renderFinishedSemaphore;
+	std::vector<vk::Semaphore> imageAvailableSemaphores;
+	std::vector<vk::Semaphore> renderFinishedSemaphores;
+	std::vector<vk::Fence> inFlightFences;
 	
 	QueueInfo queueInfo = {};
 	SwapChainDetails swapChainDetails = {};
+	int currentFrame = 0;
 	
 	void RegisterDebugCallback();
 	void DestroyDebugCallback();
@@ -54,7 +56,7 @@ class VulkanRenderer :
 	void CreateFrameBuffers();
 	void CreateCommandPool();
 	void CreateCommandBuffers();
-	void CreateSemaphores();
+	void CreateSyncObjects();
 
 public:
 	VulkanRenderer();

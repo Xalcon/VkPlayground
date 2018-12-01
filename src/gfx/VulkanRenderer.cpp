@@ -7,6 +7,8 @@
 #include "../utils/Rating.hpp"
 #include <fstream>
 
+const int MAX_FRAMES_IN_FLIGHT = 2;
+
 std::vector<const char*> getExtensions(SDL_Window* window)
 {
 	uint32_t extCount = 0;
@@ -43,8 +45,8 @@ static VKAPI_ATTR vk::Bool32 VKAPI_CALL debugCallback(
 	const VkDebugUtilsMessengerCallbackDataEXT* pCallbackData,
 	void* pUserData)
 {
-	/*if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
-		return VK_FALSE;*/
+	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT && severity & VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT)
+		return VK_FALSE;
 
 	const char* loggerName;
 	if (type == VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT)
@@ -72,16 +74,25 @@ VulkanRenderer::~VulkanRenderer()
 {
 	this->device.waitIdle();
 
-	if(this->imageAvailableSemaphore)
+	if(!this->inFlightFences.empty())
 	{
-		this->device.destroySemaphore(this->imageAvailableSemaphore);
-		this->imageAvailableSemaphore = nullptr;
+		for (auto& fence : this->inFlightFences)
+			this->device.destroyFence(fence);
+		this->inFlightFences.clear();
 	}
 
-	if(this->renderFinishedSemaphore)
+	if(!this->imageAvailableSemaphores.empty())
 	{
-		this->device.destroySemaphore(this->renderFinishedSemaphore);
-		this->renderFinishedSemaphore = nullptr;
+		for (auto& semaphore : this->imageAvailableSemaphores) 
+			this->device.destroySemaphore(semaphore);
+		this->imageAvailableSemaphores.clear();
+	}
+
+	if(!this->renderFinishedSemaphores.empty())
+	{
+		for (auto& semaphore : this->renderFinishedSemaphores)
+			this->device.destroySemaphore(semaphore);
+		this->renderFinishedSemaphores.clear();
 	}
 
 	if(this->commandPool)
@@ -374,7 +385,8 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 		SDL_GetWindowSize(window, &width, &height);
 		const auto minExtent = details.capabilities.minImageExtent;
 		const auto maxExtent = details.capabilities.maxImageExtent;
-		extend = { std::clamp(minExtent.width, maxExtent.width, static_cast<uint32_t>(width)), std::clamp(minExtent.height, maxExtent.height, static_cast<uint32_t>(height)) };
+		extend.width = std::clamp(minExtent.width, maxExtent.width, static_cast<uint32_t>(width));
+		extend.height = std::clamp(minExtent.height, maxExtent.height, static_cast<uint32_t>(height));
 	}
 
 	auto imageCount = details.capabilities.minImageCount;
@@ -528,10 +540,14 @@ void VulkanRenderer::CreateCommandBuffers()
 	}
 }
 
-void VulkanRenderer::CreateSemaphores()
+void VulkanRenderer::CreateSyncObjects()
 {
-	this->imageAvailableSemaphore = this->device.createSemaphore({});
-	this->renderFinishedSemaphore = this->device.createSemaphore({});
+	for(auto i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+	{
+		this->imageAvailableSemaphores.emplace_back(this->device.createSemaphore({}));
+		this->renderFinishedSemaphores.emplace_back(this->device.createSemaphore({}));
+		this->inFlightFences.emplace_back(this->device.createFence(vk::FenceCreateInfo(vk::FenceCreateFlagBits::eSignaled)));
+	}
 }
 
 void VulkanRenderer::Initialize(SDL_Window* window)
@@ -546,24 +562,27 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->CreateFrameBuffers();
 	this->CreateCommandPool();
 	this->CreateCommandBuffers();
-	this->CreateSemaphores();
+	this->CreateSyncObjects();
 }
 
 void VulkanRenderer::Draw()
 {
-	const auto imageResult = this->device.acquireNextImageKHR(this->swapChain, std::numeric_limits<uint64_t>::max(), this->imageAvailableSemaphore, nullptr);
+	this->device.waitForFences(1, &this->inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
+	this->device.resetFences(1, &this->inFlightFences[currentFrame]);
+
+	const auto imageResult = this->device.acquireNextImageKHR(this->swapChain, std::numeric_limits<uint64_t>::max(), this->imageAvailableSemaphores[currentFrame], nullptr);
 	if(imageResult.result != vk::Result::eSuccess)
 		throw std::exception("Unable to retrieve image from swap chain");
 
 	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-	vk::SubmitInfo submitInfo(1, &this->imageAvailableSemaphore, waitStages, 1, &this->commandBuffers[imageResult.value], 1, &this->renderFinishedSemaphore);
+	vk::SubmitInfo submitInfo(1, &this->imageAvailableSemaphores[currentFrame], waitStages, 1, &this->commandBuffers[imageResult.value], 1, &this->renderFinishedSemaphores[currentFrame]);
 
-	if(this->queueInfo.graphicsQueue.submit(1, &submitInfo, nullptr) != vk::Result::eSuccess)
+	if(this->queueInfo.graphicsQueue.submit(1, &submitInfo, this->inFlightFences[currentFrame]) != vk::Result::eSuccess)
 		throw std::exception("error while submitting command buffer to graphics queue");
 
-	vk::PresentInfoKHR presentInfo(1, &this->renderFinishedSemaphore, 1, &this->swapChain, &imageResult.value);
+	const vk::PresentInfoKHR presentInfo(1, &this->renderFinishedSemaphores[currentFrame], 1, &this->swapChain, &imageResult.value);
 	if(this->queueInfo.presentQueue.presentKHR(presentInfo) != vk::Result::eSuccess)
 		throw std::exception("Error presenting next frame");
 
-	this->queueInfo.presentQueue.waitIdle();
+	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }
