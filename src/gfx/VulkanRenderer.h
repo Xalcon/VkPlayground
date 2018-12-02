@@ -63,6 +63,7 @@ public:
 	VulkanRenderer();
 	virtual ~VulkanRenderer();
 	void Initialize(SDL_Window* window) override;
+	void Resize(SDL_Window* window, uint32_t width, uint32_t height) override;
 	void Draw() override;
 };
 

@@ -368,17 +368,17 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 		}
 	});
 
-	vk::Extent2D extend;
+	vk::Extent2D extent;
 	if(details.capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-		extend = details.capabilities.currentExtent;
+		extent = details.capabilities.currentExtent;
 	else
 	{
 		int width, height;
 		SDL_GetWindowSize(window, &width, &height);
 		const auto minExtent = details.capabilities.minImageExtent;
 		const auto maxExtent = details.capabilities.maxImageExtent;
-		extend.width = std::clamp(minExtent.width, maxExtent.width, static_cast<uint32_t>(width));
-		extend.height = std::clamp(minExtent.height, maxExtent.height, static_cast<uint32_t>(height));
+		extent.width = std::clamp(minExtent.width, maxExtent.width, static_cast<uint32_t>(width));
+		extent.height = std::clamp(minExtent.height, maxExtent.height, static_cast<uint32_t>(height));
 	}
 
 	auto imageCount = details.capabilities.minImageCount;
@@ -388,13 +388,14 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	if (details.capabilities.maxImageCount > 0 && imageCount > details.capabilities.maxImageCount)
 	    imageCount = details.capabilities.maxImageCount;
 
+	auto oldSwapChain = this->swapChain ? this->swapChain : nullptr;
 	vk::SwapchainCreateInfoKHR swapchainCreateInfo({},
-		this->surface, imageCount, surfaceFormat.format, surfaceFormat.colorSpace, extend, 1, vk::ImageUsageFlagBits::eColorAttachment,
+		this->surface, imageCount, surfaceFormat.format, surfaceFormat.colorSpace, extent, 1, vk::ImageUsageFlagBits::eColorAttachment,
 		vk::SharingMode::eExclusive, 
 		0, nullptr, 
 		details.capabilities.currentTransform,
 		vk::CompositeAlphaFlagBitsKHR::eOpaque,
-		bestPresentMode.element, VK_TRUE, nullptr);
+		bestPresentMode.element, VK_TRUE, oldSwapChain);
 
 	if(this->queueInfo.graphicsQueueFamilyIndex != this->queueInfo.presentQueueFamilyIndex)
 	{
@@ -408,12 +409,17 @@ void VulkanRenderer::CreateSwapChain(SDL_Window* window)
 	this->swapChain = this->device.createSwapchainKHR(swapchainCreateInfo);
 	this->swapChainImages = this->device.getSwapchainImagesKHR(this->swapChain);
 
-	this->swapChainDetails = { surfaceFormat.format, surfaceFormat.colorSpace, bestPresentMode.element, extend };
+	this->swapChainDetails = { surfaceFormat.format, surfaceFormat.colorSpace, bestPresentMode.element, extent };
 
 	for (auto& image : this->swapChainImages)
 	{
 		vk::ImageViewCreateInfo createInfo({}, image, vk::ImageViewType::e2D, surfaceFormat.format, {}, vk::ImageSubresourceRange(vk::ImageAspectFlagBits::eColor, 0, 1, 0, 1));
 		this->swapChainImageViews.emplace_back(this->device.createImageView(createInfo));
+	}
+
+	if(oldSwapChain)
+	{
+		this->device.destroySwapchainKHR(oldSwapChain);
 	}
 }
 
@@ -468,10 +474,16 @@ void VulkanRenderer::CreateGraphicsPipeline()
 
 	vk::PipelineVertexInputStateCreateInfo vertexInputInfo({},  0, nullptr, 0, nullptr);
 	vk::PipelineInputAssemblyStateCreateInfo inputAssembly({}, vk::PrimitiveTopology::eTriangleList, VK_FALSE);
-	auto width = static_cast<float>(this->swapChainDetails.extent.width), height = static_cast<float>(this->swapChainDetails.extent.height);
-	vk::Viewport viewport(0, 0, width, height, 0.f, 1.f);
-	vk::Rect2D scissor({0, 0}, this->swapChainDetails.extent);
-	vk::PipelineViewportStateCreateInfo viewportState({}, 1, &viewport, 1, &scissor);
+
+
+	vk::PipelineViewportStateCreateInfo viewportState({}, 1, nullptr, 1, nullptr);
+	std::vector<vk::DynamicState> enabledDynamicStates = 
+	{
+		vk::DynamicState::eViewport,
+		vk::DynamicState::eScissor
+	};
+	vk::PipelineDynamicStateCreateInfo dynamicStateCreateInfo({}, enabledDynamicStates.size(), enabledDynamicStates.data());
+
 	vk::PipelineRasterizationStateCreateInfo rasterizerState({}, VK_FALSE, VK_FALSE, vk::PolygonMode::eFill, vk::CullModeFlagBits::eBack, vk::FrontFace::eClockwise, 0, 0, 0, 0, 1.f);
 	// enabling multisampling requires a GPU logical device feature to be enabled during creation
 	vk::PipelineMultisampleStateCreateInfo multisampleState({}, vk::SampleCountFlagBits::e1, VK_FALSE, 1.f, nullptr, VK_FALSE, VK_FALSE);
@@ -482,8 +494,8 @@ void VulkanRenderer::CreateGraphicsPipeline()
 	vk::PipelineLayoutCreateInfo pipelineLayoutCreateInfo({}, 0, nullptr, 0, nullptr);
 	this->pipelineLayout = this->device.createPipelineLayout(pipelineLayoutCreateInfo);
 
-	vk::GraphicsPipelineCreateInfo pipelineCreateInfo({}, 2, shaderStages, &vertexInputInfo, &inputAssembly, nullptr, &viewportState, &rasterizerState, &multisampleState, nullptr, &colorBlending, nullptr, this->pipelineLayout, this->renderPass, 0, nullptr, -1);
-	this->pipeline = this->device.createGraphicsPipelines(nullptr, vk::ArrayProxy<const vk::GraphicsPipelineCreateInfo>(1, &pipelineCreateInfo))[0];
+	vk::GraphicsPipelineCreateInfo pipelineCreateInfo({}, 2, shaderStages, &vertexInputInfo, &inputAssembly, nullptr, &viewportState, &rasterizerState, &multisampleState, nullptr, &colorBlending, &dynamicStateCreateInfo, this->pipelineLayout, this->renderPass, 0, nullptr, -1);
+	this->pipeline = this->device.createGraphicsPipelines(nullptr, pipelineCreateInfo)[0];
 
 	this->device.destroyShaderModule(vertShader);
 	this->device.destroyShaderModule(fragShader);
@@ -523,6 +535,14 @@ void VulkanRenderer::CreateCommandBuffers()
 		};
 		vk::RenderPassBeginInfo renderPassInfo(this->renderPass, this->frameBuffers[i], vk::Rect2D({0, 0}, this->swapChainDetails.extent), 1, clearValue);
 		commandBuffer.beginRenderPass(&renderPassInfo, vk::SubpassContents::eInline);
+
+		const auto width = static_cast<float>(this->swapChainDetails.extent.width);
+		const auto height = static_cast<float>(this->swapChainDetails.extent.height);
+		vk::Viewport viewport(0, 0, width, height, 0.f, 1.f);
+		vk::Rect2D scissor({0, 0}, this->swapChainDetails.extent);
+		commandBuffer.setViewport(0, viewport);
+		commandBuffer.setScissor(0, scissor);
+
 		commandBuffer.bindPipeline(vk::PipelineBindPoint::eGraphics, this->pipeline);
 
 		commandBuffer.draw(3, 1, 0, 0);
@@ -548,13 +568,38 @@ void VulkanRenderer::Initialize(SDL_Window* window)
 	this->CreateSurface(window);
 	this->PickPhysicalDevice();
 	this->CreateDevice();
+	this->CreateCommandPool();
+
 	this->CreateSwapChain(window);
+
+	// TODO: handle swapchain format changes (i.e. on window resize)
 	this->CreateRenderPass();
 	this->CreateGraphicsPipeline();
+
 	this->CreateFrameBuffers();
-	this->CreateCommandPool();
+
 	this->CreateCommandBuffers();
 	this->CreateSyncObjects();
+}
+
+void VulkanRenderer::Resize(SDL_Window* window, uint32_t width, uint32_t height)
+{
+	this->device.waitIdle();
+
+	this->device.freeCommandBuffers(this->commandPool, this->commandBuffers);
+	this->commandBuffers.clear();
+
+	for (auto& imageView : this->swapChainImageViews)
+		this->device.destroyImageView(imageView);
+	this->swapChainImageViews.clear();
+
+	for (auto& frameBuffer : this->frameBuffers)
+		this->device.destroyFramebuffer(frameBuffer);
+	this->frameBuffers.clear();
+
+	this->CreateSwapChain(window);
+	this->CreateFrameBuffers();
+	this->CreateCommandBuffers();
 }
 
 void VulkanRenderer::Draw()
