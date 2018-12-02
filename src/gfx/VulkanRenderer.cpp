@@ -74,33 +74,6 @@ VulkanRenderer::~VulkanRenderer()
 {
 	this->device.waitIdle();
 
-	if(!this->inFlightFences.empty())
-	{
-		for (auto& fence : this->inFlightFences)
-			this->device.destroyFence(fence);
-		this->inFlightFences.clear();
-	}
-
-	if(!this->imageAvailableSemaphores.empty())
-	{
-		for (auto& semaphore : this->imageAvailableSemaphores) 
-			this->device.destroySemaphore(semaphore);
-		this->imageAvailableSemaphores.clear();
-	}
-
-	if(!this->renderFinishedSemaphores.empty())
-	{
-		for (auto& semaphore : this->renderFinishedSemaphores)
-			this->device.destroySemaphore(semaphore);
-		this->renderFinishedSemaphores.clear();
-	}
-
-	if(this->commandPool)
-	{
-		this->device.destroyCommandPool(this->commandPool);
-		this->commandPool = nullptr;
-	}
-
 	if(!this->frameBuffers.empty())
 	{
 		for (auto& frameBuffer : this->frameBuffers)
@@ -150,6 +123,33 @@ VulkanRenderer::~VulkanRenderer()
 		this->surface = nullptr;
 	}
 
+	if(!this->inFlightFences.empty())
+	{
+		for (auto& fence : this->inFlightFences)
+			this->device.destroyFence(fence);
+		this->inFlightFences.clear();
+	}
+
+	if(!this->imageAvailableSemaphores.empty())
+	{
+		for (auto& semaphore : this->imageAvailableSemaphores) 
+			this->device.destroySemaphore(semaphore);
+		this->imageAvailableSemaphores.clear();
+	}
+
+	if(!this->renderFinishedSemaphores.empty())
+	{
+		for (auto& semaphore : this->renderFinishedSemaphores)
+			this->device.destroySemaphore(semaphore);
+		this->renderFinishedSemaphores.clear();
+	}
+
+	if(this->commandPool)
+	{
+		this->device.destroyCommandPool(this->commandPool);
+		this->commandPool = nullptr;
+	}
+
 	if (this->device)
 	{
 		this->device.destroy();
@@ -167,24 +167,15 @@ VulkanRenderer::~VulkanRenderer()
 
 void VulkanRenderer::RegisterDebugCallback()
 {
-	/*vk::DebugUtilsMessengerCreateInfoEXT createInfo(
+	vk::DebugUtilsMessengerCreateInfoEXT createInfo(
 		vk::DebugUtilsMessengerCreateFlagsEXT(),
 		vk::DebugUtilsMessageSeverityFlagBitsEXT::eVerbose | vk::DebugUtilsMessageSeverityFlagBitsEXT::eInfo | vk::DebugUtilsMessageSeverityFlagBitsEXT::eWarning | vk::DebugUtilsMessageSeverityFlagBitsEXT::eError,
 		vk::DebugUtilsMessageTypeFlagBitsEXT::eGeneral | vk::DebugUtilsMessageTypeFlagBitsEXT::ePerformance | vk::DebugUtilsMessageTypeFlagBitsEXT::eValidation,
 		debugCallback,
-		nullptr);*/
-		// this->instance.createDebugUtilsMessengerEXT(createInfo);
+		nullptr);
 
-	VkDebugUtilsMessengerCreateInfoEXT createInfo = {};
-	createInfo.sType = VK_STRUCTURE_TYPE_DEBUG_UTILS_MESSENGER_CREATE_INFO_EXT;
-	createInfo.messageSeverity = VK_DEBUG_UTILS_MESSAGE_SEVERITY_VERBOSE_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_INFO_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_WARNING_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_SEVERITY_ERROR_BIT_EXT;
-	createInfo.messageType = VK_DEBUG_UTILS_MESSAGE_TYPE_GENERAL_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_VALIDATION_BIT_EXT | VK_DEBUG_UTILS_MESSAGE_TYPE_PERFORMANCE_BIT_EXT;
-	createInfo.pfnUserCallback = debugCallback;
-	createInfo.pUserData = nullptr;
-
-	const auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(
-		static_cast<VkInstance>(this->instance), "vkCreateDebugUtilsMessengerEXT"));
-	func(static_cast<VkInstance>(this->instance), &createInfo, nullptr, &this->callback);
+	const auto func = reinterpret_cast<PFN_vkCreateDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(static_cast<VkInstance>(this->instance), "vkCreateDebugUtilsMessengerEXT"));
+	func(static_cast<VkInstance>(this->instance), reinterpret_cast<const struct VkDebugUtilsMessengerCreateInfoEXT*>(&createInfo), nullptr, &this->callback);
 }
 
 void VulkanRenderer::DestroyDebugCallback()
@@ -194,7 +185,7 @@ void VulkanRenderer::DestroyDebugCallback()
 		const auto func = reinterpret_cast<PFN_vkDestroyDebugUtilsMessengerEXT>(vkGetInstanceProcAddr(
 			static_cast<VkInstance>(this->instance), "vkDestroyDebugUtilsMessengerEXT"));
 		func(static_cast<VkInstance>(this->instance), this->callback, nullptr);
-		this->callback = 0;
+		this->callback = VK_NULL_HANDLE;
 	}
 }
 
@@ -285,6 +276,7 @@ void VulkanRenderer::CreateDevice()
 		float score = -100;
 		if (physicalDevice.getSurfaceSupportKHR(index, surface))
 			score += 200;
+
 		return score;
 	});
 
@@ -570,19 +562,40 @@ void VulkanRenderer::Draw()
 	this->device.waitForFences(1, &this->inFlightFences[currentFrame], VK_TRUE, std::numeric_limits<uint64_t>::max());
 	this->device.resetFences(1, &this->inFlightFences[currentFrame]);
 
-	const auto imageResult = this->device.acquireNextImageKHR(this->swapChain, std::numeric_limits<uint64_t>::max(), this->imageAvailableSemaphores[currentFrame], nullptr);
-	if(imageResult.result != vk::Result::eSuccess)
-		throw std::exception("Unable to retrieve image from swap chain");
+	uint32_t imageIndex;
+	const auto acquireImageResult = this->device.acquireNextImageKHR(this->swapChain, std::numeric_limits<uint64_t>::max(), this->imageAvailableSemaphores[currentFrame], nullptr, &imageIndex);
+	if(acquireImageResult != vk::Result::eSuccess)
+	{
+		if(acquireImageResult == vk::Result::eErrorOutOfDateKHR)
+		{
+			
+		}
+		else
+		{
+			throw std::exception("Unable to retrieve image from swap chain");
+		}
+	}
 
 	vk::PipelineStageFlags waitStages[] = { vk::PipelineStageFlagBits::eColorAttachmentOutput };
-	vk::SubmitInfo submitInfo(1, &this->imageAvailableSemaphores[currentFrame], waitStages, 1, &this->commandBuffers[imageResult.value], 1, &this->renderFinishedSemaphores[currentFrame]);
+	vk::SubmitInfo submitInfo(1, &this->imageAvailableSemaphores[currentFrame], waitStages, 1, &this->commandBuffers[imageIndex], 1, &this->renderFinishedSemaphores[currentFrame]);
 
 	if(this->queueInfo.graphicsQueue.submit(1, &submitInfo, this->inFlightFences[currentFrame]) != vk::Result::eSuccess)
 		throw std::exception("error while submitting command buffer to graphics queue");
 
-	const vk::PresentInfoKHR presentInfo(1, &this->renderFinishedSemaphores[currentFrame], 1, &this->swapChain, &imageResult.value);
-	if(this->queueInfo.presentQueue.presentKHR(presentInfo) != vk::Result::eSuccess)
-		throw std::exception("Error presenting next frame");
+	const vk::PresentInfoKHR presentInfo(1, &this->renderFinishedSemaphores[currentFrame], 1, &this->swapChain, &imageIndex);
+
+	const auto presentResult = this->queueInfo.presentQueue.presentKHR(&presentInfo);
+	if(presentResult != vk::Result::eSuccess)
+	{
+		if(presentResult == vk::Result::eErrorOutOfDateKHR)
+		{
+			
+		}
+		else
+		{
+			throw std::exception("Error presenting next frame");
+		}
+	}
 
 	currentFrame = (currentFrame + 1) % MAX_FRAMES_IN_FLIGHT;
 }

@@ -32,7 +32,7 @@ void App::InitWindow()
 		!is64Bit() ? "VkPlayground - 32Bit" : "VkPlayground - 64Bit",
 		SDL_WINDOWPOS_UNDEFINED, SDL_WINDOWPOS_UNDEFINED,
 		800, 480,
-		SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN
+		SDL_WINDOW_SHOWN | SDL_WINDOW_VULKAN | SDL_WINDOW_RESIZABLE
 	);
 
 	if (this->window == nullptr)
@@ -61,7 +61,9 @@ void App::MainLoop()
 			}
 		}
 		//Render the scene
-		this->renderer->Draw();
+		const auto windowFlags = SDL_GetWindowFlags(this->window);
+		if((windowFlags & SDL_WINDOW_MINIMIZED) == 0)
+			this->renderer->Draw();
 	}
 	log->info("Shutting down");
 }

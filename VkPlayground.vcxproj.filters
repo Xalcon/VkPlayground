@@ -13,7 +13,7 @@
     <ClInclude Include="src\utils\Utils.hpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="shader\triangle.frag" />
     <None Include="shader\triangle.vert" />
+    <None Include="shader\triangle.frag" />
   </ItemGroup>
 </Project>

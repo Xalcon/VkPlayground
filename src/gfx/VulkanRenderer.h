@@ -58,6 +58,7 @@ class VulkanRenderer :
 	void CreateCommandBuffers();
 	void CreateSyncObjects();
 
+	void CleanupSwapChain();
 public:
 	VulkanRenderer();
 	virtual ~VulkanRenderer();
